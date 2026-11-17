@@ -1,7 +1,9 @@
 #!/usr/bin/env Rscript
 
-# Reproduce the 100K-cell Seurat leverage-score sketch from the 10x Genomics
-# ovarian-cancer annotation guide and export the selected-gene BiNVaST inputs.
+# Prepare the 10x ovarian-cancer example for BiNVaST. RAW_DIR may contain either
+# the two small GitHub toy RDS bundles or the original full 10x files. In toy
+# mode all 5,000 spatial cells are used; full mode reproduces the guide's 100K
+# Seurat leverage-score sketch.
 
 suppressPackageStartupMessages({
   library(Seurat)
@@ -23,6 +25,16 @@ dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 source(file.path(repo_root, "R", "select_shared_vst_seurat.R"))
 
+toy_spatial_file <- file.path(raw_dir, "toy_spatial.rds")
+toy_reference_file <- file.path(raw_dir, "toy_single_cell_reference.rds")
+if (xor(file.exists(toy_spatial_file), file.exists(toy_reference_file))) {
+  stop(
+    "Toy mode requires both toy_spatial.rds and ",
+    "toy_single_cell_reference.rds in RAW_DIR"
+  )
+}
+toy_mode <- file.exists(toy_spatial_file) && file.exists(toy_reference_file)
+
 target_h5 <- file.path(
   raw_dir,
   "Xenium_Prime_Ovarian_Cancer_FFPE_XRrun_cell_feature_matrix.h5"
@@ -37,22 +49,45 @@ annotation_csv <- file.path(
   "FLEX_Ovarian_Barcode_Cluster_Annotation.csv"
 )
 
-required_files <- c(target_h5, cells_csv, reference_h5, annotation_csv)
+required_files <- if (toy_mode) {
+  c(toy_spatial_file, toy_reference_file)
+} else {
+  c(target_h5, cells_csv, reference_h5, annotation_csv)
+}
 missing_files <- required_files[!file.exists(required_files)]
 if (length(missing_files)) {
   stop("Missing downloaded files: ", paste(missing_files, collapse = ", "))
 }
 
-message_now("Loading Xenium expression matrix")
-target_counts <- get_gene_expression_matrix(
-  Seurat::Read10X_h5(target_h5, use.names = TRUE, unique.features = TRUE)
-)
+if (toy_mode) {
+  message_now("Loading compressed toy spatial bundle")
+  toy_spatial <- readRDS(toy_spatial_file)
+  if (!is.list(toy_spatial) ||
+      !all(c("counts", "coordinates") %in% names(toy_spatial))) {
+    stop("toy_spatial.rds must contain counts and coordinates")
+  }
+  target_counts <- toy_spatial$counts
+  toy_coordinates <- data.table::as.data.table(toy_spatial$coordinates)
+} else {
+  message_now("Loading full Xenium expression matrix")
+  target_counts <- get_gene_expression_matrix(
+    Seurat::Read10X_h5(target_h5, use.names = TRUE, unique.features = TRUE)
+  )
+}
 target_counts <- methods::as(target_counts, "dgCMatrix")
 positive_target <- Matrix::colSums(target_counts) > 0
 target_counts <- target_counts[, positive_target, drop = FALSE]
 
 sketch_file <- file.path(output_dir, "sketch_cell_ids.csv")
-if (file.exists(sketch_file)) {
+if (toy_mode) {
+  sketch_cells <- colnames(target_counts)
+  sketch_method <- "all_toy_cells"
+  data.table::fwrite(
+    data.table::data.table(cell_id = sketch_cells),
+    sketch_file
+  )
+  message_now("Using all ", length(sketch_cells), " toy spatial cells")
+} else if (file.exists(sketch_file)) {
   message_now("Reusing the existing 100,000-cell sketch IDs")
   sketch_cells <- data.table::fread(
     sketch_file,
@@ -81,6 +116,7 @@ if (file.exists(sketch_file)) {
     verbose = TRUE
   )
   sketch_cells <- colnames(target_object[["sketch"]])
+  sketch_method <- "LeverageScore"
   data.table::fwrite(
     data.table::data.table(cell_id = sketch_cells),
     sketch_file
@@ -88,28 +124,45 @@ if (file.exists(sketch_file)) {
   rm(target_object)
   invisible(gc())
 }
-if (length(sketch_cells) != 100000L) {
+if (!toy_mode && !exists("sketch_method")) sketch_method <- "LeverageScore"
+if (!toy_mode && length(sketch_cells) != 100000L) {
   stop("Expected 100,000 sketch cells; observed ", length(sketch_cells))
 }
 
-message_now("Loading the matched Flex scRNA-seq reference")
-reference_counts <- get_gene_expression_matrix(
-  Seurat::Read10X_h5(reference_h5, use.names = TRUE, unique.features = TRUE)
-)
-reference_counts <- methods::as(reference_counts, "dgCMatrix")
-annotations <- data.table::fread(annotation_csv, colClasses = "character")
-annotation_label_column <- intersect(
-  c("Cell Annotation", "Cell.Annotation"),
-  names(annotations)
-)
-if (!"Barcode" %in% names(annotations) || !length(annotation_label_column)) {
-  stop("Reference annotation CSV lacks Barcode or Cell Annotation")
+if (toy_mode) {
+  message_now("Loading compressed toy single-cell reference bundle")
+  toy_reference <- readRDS(toy_reference_file)
+  if (!is.list(toy_reference) ||
+      !all(c("counts", "labels") %in% names(toy_reference))) {
+    stop("toy_single_cell_reference.rds must contain counts and labels")
+  }
+  reference_counts <- methods::as(toy_reference$counts, "dgCMatrix")
+  toy_labels <- data.table::as.data.table(toy_reference$labels)
+  if (!all(c("cell_id", "label") %in% names(toy_labels))) {
+    stop("Toy reference labels must contain cell_id and label")
+  }
+  label_lookup <- setNames(toy_labels$label, toy_labels$cell_id)
+  reference_labels_all <- unname(label_lookup[colnames(reference_counts)])
+} else {
+  message_now("Loading the matched full Flex scRNA-seq reference")
+  reference_counts <- get_gene_expression_matrix(
+    Seurat::Read10X_h5(reference_h5, use.names = TRUE, unique.features = TRUE)
+  )
+  reference_counts <- methods::as(reference_counts, "dgCMatrix")
+  annotations <- data.table::fread(annotation_csv, colClasses = "character")
+  annotation_label_column <- intersect(
+    c("Cell Annotation", "Cell.Annotation"),
+    names(annotations)
+  )
+  if (!"Barcode" %in% names(annotations) || !length(annotation_label_column)) {
+    stop("Reference annotation CSV lacks Barcode or Cell Annotation")
+  }
+  label_lookup <- setNames(
+    annotations[[annotation_label_column[[1L]]]],
+    annotations$Barcode
+  )
+  reference_labels_all <- unname(label_lookup[colnames(reference_counts)])
 }
-label_lookup <- setNames(
-  annotations[[annotation_label_column[[1L]]]],
-  annotations$Barcode
-)
-reference_labels_all <- unname(label_lookup[colnames(reference_counts)])
 
 # Match the guide's reference QC: 200 < UMI counts < 10,000 and <10% MT.
 reference_library_size <- Matrix::colSums(reference_counts)
@@ -149,7 +202,7 @@ sketch_shared_counts <- target_counts[
 vst_object <- Seurat::CreateSeuratObject(
   counts = sketch_shared_counts,
   assay = "RNA",
-  project = "Xenium_Ovarian_100K_Sketch"
+  project = if (toy_mode) "Ovarian_Toy_Spatial" else "Xenium_Ovarian_100K_Sketch"
 )
 set.seed(123L)
 vst_object <- Seurat::FindVariableFeatures(
@@ -171,7 +224,16 @@ rm(vst_object, sketch_shared_counts)
 invisible(gc())
 
 message_now("Aligning sketch coordinates")
-coordinates <- read_target_coordinates(cells_csv, sketch_cells)
+if (toy_mode) {
+  if (!all(c("cell_id", "x", "y") %in% names(toy_coordinates))) {
+    stop("Toy spatial coordinates must contain cell_id, x, and y")
+  }
+  coordinate_index <- match(sketch_cells, toy_coordinates$cell_id)
+  if (anyNA(coordinate_index)) stop("Toy coordinates are missing sketch cells")
+  coordinates <- toy_coordinates[coordinate_index, .(cell_id, x, y)]
+} else {
+  coordinates <- read_target_coordinates(cells_csv, sketch_cells)
+}
 data.table::fwrite(
   coordinates[, .(cell_id, x, y)],
   file.path(output_dir, "target_coordinates.csv")
@@ -220,6 +282,7 @@ data.table::fwrite(
 
 summary <- data.table::data.table(
   metric = c(
+    "input_mode",
     "full_xenium_cells",
     "sketch_cells",
     "xenium_genes",
@@ -232,6 +295,7 @@ summary <- data.table::data.table(
     "sketch_seed"
   ),
   value = c(
+    if (toy_mode) "github_toy_rds" else "full_10x_h5",
     ncol(target_counts),
     length(sketch_cells),
     nrow(target_counts),
@@ -240,7 +304,7 @@ summary <- data.table::data.table(
     length(unique(reference_labels)),
     length(shared_genes),
     length(selected_genes),
-    "LeverageScore",
+    sketch_method,
     123L
   )
 )
