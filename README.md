@@ -2,7 +2,7 @@
 
 BiNVaST is a spatially informed deep-learning framework for transferring cell-type information from a pre-annotated single-cell reference to high-resolution spatial transcriptomics data. It aligns reference and query expression distributions, generates query-matched synthetic training cells, and combines expression and spatial-graph representations in a dual-branch variational autoencoder with supervised classification.
 
-The Python implementation is distributed as the installable `binvast` package. The repository also includes an R preprocessing workflow for shared-gene selection and generation of the standardized inputs consumed by the package. Data are not included.
+The Python implementation is distributed as the installable `binvast` package. The repository also includes an R preprocessing workflow for shared-gene selection and generation of the standardized inputs consumed by the package. The full datasets are not included, but small sparse spatial and single-cell reference bundles are provided for the worked example.
 
 ## Model overview
 
@@ -31,7 +31,14 @@ BiNVaST/
 ├── R/
 │   └── select_shared_vst_seurat.R
 ├── examples/
-│   └── basic_workflow.py
+│   ├── basic_workflow.py
+│   └── xenium_10x_guide/
+│       ├── xenium_ovarian_10x_binvast.ipynb
+│       ├── prepare_10x_guide_data.R
+│       ├── make_toy_10x_data.R
+│       └── toy_data/
+│           ├── toy_spatial.rds
+│           └── toy_single_cell_reference.rds
 ├── images/
 ├── pyproject.toml
 ├── setup.cfg
@@ -75,6 +82,21 @@ Verify the installation:
 ```bash
 python -c "import binvast; print(binvast.__version__)"
 ```
+
+## Executed 10x Xenium example
+
+The [10x Xenium ovarian-cancer notebook](examples/xenium_10x_guide/xenium_ovarian_10x_binvast.ipynb)
+downloads the public query and matched scRNA-seq reference used in the 10x
+Genomics annotation guide, reproduces its 100,000-cell Seurat sketch, runs the
+BiNVaST workflow, and displays the predicted labels in tissue space. The
+checked-in outputs use a 50-epoch checkpoint on all 100,000 sketch cells; add
+later epoch snapshots for a longer analysis.
+
+For an upload-friendly test, use the two tracked sparse RDS files in
+`examples/xenium_10x_guide/toy_data/`. Together they are under 3 MiB and contain
+5,000 spatial cells plus a balanced 1,200-cell reference covering all 16 labels.
+The example R script detects these bundles automatically and produces the same
+standardized four-file input interface used by the Python package.
 
 ## Prepare input data in R
 
