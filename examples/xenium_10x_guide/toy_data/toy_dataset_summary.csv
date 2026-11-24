@@ -1,0 +1,3 @@
+dataset,genes,cells,labels,sampling
+spatial query,5101,10000,,seeded random sample; seed=123
+single-cell reference,18082,1200,16,up to 75 QC-passing cells per label; seed=123

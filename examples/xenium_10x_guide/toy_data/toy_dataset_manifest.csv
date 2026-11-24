@@ -1,0 +1,9 @@
+file,role,format,bytes,mib,md5
+toy_spatial_counts.mtx.gz,spatial sparse raw counts,Matrix Market text + gzip,5627464,5.367,911cf5b5428c1e9d73e60baa2f0ea319
+toy_spatial_barcodes.tsv.gz,spatial cell identifiers,TSV + gzip,48574,0.046,ac2ccbd4ef301b0d368ee59f6b8a1cbd
+toy_spatial_features.tsv.gz,spatial gene identifiers,TSV + gzip,22995,0.022,ef6f89836a1586c74e5d75798b24a71a
+toy_spatial_coordinates.csv.gz,spatial coordinates,CSV + gzip,177582,0.169,d71acdcceaa90206d70777951423f4ce
+toy_reference_counts.mtx.gz,reference sparse raw counts,Matrix Market text + gzip,3931792,3.75,b098210488bc98d710cf9beace05caf9
+toy_reference_features.tsv.gz,reference gene identifiers,TSV + gzip,107509,0.103,c849e6f3f392e0432d0e9aed2569fa74
+toy_reference_barcodes.tsv.gz,reference cell identifiers,TSV + gzip,6632,0.006,022e9e54a337f89725906ba2833052dd
+toy_reference_labels.csv.gz,reference cell-type labels,CSV + gzip,9326,0.009,2eee8c443a8d21af2534595330c39494
