@@ -1,3 +1,0 @@
-file,role,genes,cells,labels,bytes,mib,md5
-toy_spatial.rds,spatial query,5101,5000,,1142588,1.09,7622b3c65c3c8ec1461efe64a284f839
-toy_single_cell_reference.rds,annotated single-cell reference,18082,1200,16,1572540,1.5,49ae17ebe8ff38d8ab9dc0279f0a9647
