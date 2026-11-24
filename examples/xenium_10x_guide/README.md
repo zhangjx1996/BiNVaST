@@ -13,12 +13,14 @@ Matplotlib, and the Python dependencies declared by BiNVaST.
 
 ## Small data that can be uploaded to GitHub
 
-The `toy_data/` directory contains two compressed sparse RDS bundles:
+The [`toy_data/` directory](toy_data/README.md) contains a compressed sparse
+text bundle:
 
-- `toy_spatial.rds`: 5,000 Xenium cells with raw counts and coordinates
-  (1.09 MiB).
-- `toy_single_cell_reference.rds`: 1,200 QC-passing single cells, balanced
-  across all 16 reference labels (1.50 MiB).
+- Spatial query: 10,000 Xenium cells with raw counts and coordinates.
+- Single-cell reference: 1,200 QC-passing cells balanced across all 16 labels.
+- Saved formats: gzip-compressed Matrix Market counts, TSV features/barcodes,
+  and CSV coordinates/labels.
+- Largest individual file: 5.367 MiB.
 
 Prepare the toy inputs from the repository root with:
 
@@ -29,9 +31,10 @@ Rscript examples/xenium_10x_guide/prepare_10x_guide_data.R \
   .
 ```
 
-The script automatically imports the sparse RDS bundles and uses all toy
-spatial cells. If the directory instead contains the original 10x H5/CSV files,
-the same script retains the full 100,000-cell leverage-score sketch workflow.
+The script automatically imports the single spatial sparse-count file and uses
+all 10,000 toy spatial cells. If the directory instead contains the original
+10x H5/CSV files, the same script retains the full 100,000-cell leverage-score
+sketch workflow.
 
 The checked-in notebook is executed through a 50-epoch checkpoint on all 100,000
 sketch cells. Add later values to `SNAPSHOT_EPOCHS` for a longer analysis,
@@ -40,8 +43,14 @@ the resulting annotations.
 
 Generated downloads, prepared matrices, synthetic data, model artifacts, and
 figures are stored under this example's `data/`, `toy_preprocessed/`, and
-`results/` directories and are ignored by Git. The two small source bundles in
-`toy_data/` are intentionally tracked.
+`results/` directories and are ignored by Git. The small source files in
+`toy_data/` are intentionally tracked. See the
+[toy-data README](toy_data/README.md) for the complete format specification and
+manual R import example.
+
+The R preprocessing step expands the sparse source into a dense selected-gene
+CSV for the Python workflow. That generated target CSV is about 49 MB and is
+kept under the ignored `toy_preprocessed/` directory; it is not a GitHub upload.
 
 Official resources:
 

@@ -37,8 +37,15 @@ BiNVaST/
 │       ├── prepare_10x_guide_data.R
 │       ├── make_toy_10x_data.R
 │       └── toy_data/
-│           ├── toy_spatial.rds
-│           └── toy_single_cell_reference.rds
+│           ├── README.md
+│           ├── toy_spatial_counts.mtx.gz
+│           ├── toy_spatial_features.tsv.gz
+│           ├── toy_spatial_barcodes.tsv.gz
+│           ├── toy_spatial_coordinates.csv.gz
+│           ├── toy_reference_counts.mtx.gz
+│           ├── toy_reference_features.tsv.gz
+│           ├── toy_reference_barcodes.tsv.gz
+│           └── toy_reference_labels.csv.gz
 ├── images/
 ├── pyproject.toml
 ├── setup.cfg
@@ -85,18 +92,25 @@ python -c "import binvast; print(binvast.__version__)"
 
 ## Executed 10x Xenium example
 
-The [10x Xenium ovarian-cancer notebook](examples/xenium_10x_guide/xenium_ovarian_10x_binvast.ipynb)
-downloads the public query and matched scRNA-seq reference used in the 10x
+The [10x Xenium ovarian-cancer example](examples/xenium_10x_guide/README.md)
+contains the executed
+[notebook](examples/xenium_10x_guide/xenium_ovarian_10x_binvast.ipynb),
+download workflow, and a
+[complete toy-data format guide](examples/xenium_10x_guide/toy_data/README.md).
+The notebook downloads the public query and matched scRNA-seq reference used in the 10x
 Genomics annotation guide, reproduces its 100,000-cell Seurat sketch, runs the
 BiNVaST workflow, and displays the predicted labels in tissue space. The
 checked-in outputs use a 50-epoch checkpoint on all 100,000 sketch cells; add
 later epoch snapshots for a longer analysis.
 
-For an upload-friendly test, use the two tracked sparse RDS files in
-`examples/xenium_10x_guide/toy_data/`. Together they are under 3 MiB and contain
-5,000 spatial cells plus a balanced 1,200-cell reference covering all 16 labels.
-The example R script detects these bundles automatically and produces the same
-standardized four-file input interface used by the Python package.
+For an upload-friendly test, use the tracked sparse text files in
+[`examples/xenium_10x_guide/toy_data/`](examples/xenium_10x_guide/toy_data/README.md).
+They contain 10,000 spatial cells plus a balanced 1,200-cell reference covering
+all 16 labels. Raw counts use gzip-compressed Matrix Market text; feature and
+cell identifiers use TSV, while coordinates and labels use CSV. The complete
+spatial count matrix fits in one file below 10 MB. The example R script imports
+it automatically and produces the same standardized four-file input interface
+used by the Python package.
 
 ## Prepare input data in R
 
@@ -303,7 +317,28 @@ The workflow exposes a random seed for synthetic-label sampling, PCA, validation
 
 ## Citation
 
-If you use BiNVaST in your research, please cite the associated manuscript. Citation details will be added when the manuscript is available.
+If you use BiNVaST in your research, please cite the associated preprint:
+
+> Zhang, J., Li, L., Liu, L., Fridley, B., Cheng, C., Plummer, J., Wu, G.,
+> Chiang, J., & Li, Q. (2026). BiNVaST: niche boundary-preserving and synthetic
+> data-guided variational autoencoders for concordant inference across
+> high-resolution spatial transcriptomic platforms. *bioRxiv*.
+> https://doi.org/10.64898/2026.10.15.759369
+
+```bibtex
+@article{zhang2026binvast,
+  title   = {BiNVaST: niche boundary-preserving and synthetic data-guided
+             variational autoencoders for concordant inference across
+             high-resolution spatial transcriptomic platforms},
+  author  = {Zhang, Jingxuan and Li, Lei and Liu, Limeng and Fridley, Brooke and
+             Cheng, Cheng and Plummer, Jasmine and Wu, Gang and Chiang, Jason and
+             Li, Qian},
+  journal = {bioRxiv},
+  year    = {2026},
+  doi     = {10.64898/2026.10.15.759369},
+  url     = {https://www.biorxiv.org/content/10.64898/2026.10.15.759369v1}
+}
+```
 
 ## License
 
