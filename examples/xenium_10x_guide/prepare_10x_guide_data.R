@@ -1,9 +1,9 @@
 #!/usr/bin/env Rscript
 
-# Prepare the 10x ovarian-cancer example for BiNVaST. RAW_DIR may contain either
-# the two small GitHub toy RDS bundles or the original full 10x files. In toy
-# mode all 5,000 spatial cells are used; full mode reproduces the guide's 100K
-# Seurat leverage-score sketch.
+# Prepare the 10x ovarian-cancer example for BiNVaST. RAW_DIR may contain the
+# upload-friendly sparse text toy bundle, the legacy two-file RDS toy bundle,
+# or the original full 10x files. Toy mode uses every spatial cell; full mode
+# reproduces the guide's 100K Seurat leverage-score sketch.
 
 suppressPackageStartupMessages({
   library(Seurat)
@@ -25,6 +25,88 @@ dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 source(file.path(repo_root, "R", "select_shared_vst_seurat.R"))
 
+read_sparse_text_matrix <- function(count_files,
+                                    barcode_files,
+                                    feature_file) {
+  if (!length(count_files) || length(count_files) != length(barcode_files)) {
+    stop("Sparse text count and barcode parts must be present one-to-one")
+  }
+  features <- data.table::fread(feature_file, colClasses = "character")
+  if (!"gene_name" %in% names(features) || anyDuplicated(features$gene_name)) {
+    stop("Feature TSV must contain unique gene_name values")
+  }
+  matrices <- vector("list", length(count_files))
+  for (index in seq_along(count_files)) {
+    connection <- gzfile(count_files[[index]], open = "rb")
+    matrix <- Matrix::readMM(connection)
+    close(connection)
+    barcodes <- data.table::fread(
+      barcode_files[[index]],
+      colClasses = "character"
+    )
+    if (!"cell_id" %in% names(barcodes)) {
+      stop("Barcode TSV lacks cell_id: ", barcode_files[[index]])
+    }
+    if (nrow(matrix) != nrow(features) || ncol(matrix) != nrow(barcodes)) {
+      stop("Sparse matrix dimensions do not match its features/barcodes")
+    }
+    rownames(matrix) <- features$gene_name
+    colnames(matrix) <- barcodes$cell_id
+    matrices[[index]] <- methods::as(matrix, "CsparseMatrix")
+  }
+  combined <- do.call(cbind, matrices)
+  if (anyDuplicated(colnames(combined))) stop("Toy cell IDs are not unique")
+  methods::as(combined, "CsparseMatrix")
+}
+
+toy_spatial_count_files <- sort(list.files(
+  raw_dir,
+  pattern = "^toy_spatial_counts_part[0-9]+[.]mtx[.]gz$",
+  full.names = TRUE
+))
+toy_spatial_barcode_files <- sort(list.files(
+  raw_dir,
+  pattern = "^toy_spatial_barcodes_part[0-9]+[.]tsv[.]gz$",
+  full.names = TRUE
+))
+toy_spatial_single_count_file <- file.path(
+  raw_dir, "toy_spatial_counts.mtx.gz"
+)
+toy_spatial_single_barcode_file <- file.path(
+  raw_dir, "toy_spatial_barcodes.tsv.gz"
+)
+if (file.exists(toy_spatial_single_count_file) ||
+    file.exists(toy_spatial_single_barcode_file)) {
+  if (!file.exists(toy_spatial_single_count_file) ||
+      !file.exists(toy_spatial_single_barcode_file)) {
+    stop(
+      "Single-file toy mode requires toy_spatial_counts.mtx.gz and ",
+      "toy_spatial_barcodes.tsv.gz"
+    )
+  }
+  toy_spatial_count_files <- toy_spatial_single_count_file
+  toy_spatial_barcode_files <- toy_spatial_single_barcode_file
+}
+toy_spatial_features_file <- file.path(raw_dir, "toy_spatial_features.tsv.gz")
+toy_spatial_coordinates_file <- file.path(raw_dir, "toy_spatial_coordinates.csv.gz")
+toy_reference_count_file <- file.path(raw_dir, "toy_reference_counts.mtx.gz")
+toy_reference_features_file <- file.path(raw_dir, "toy_reference_features.tsv.gz")
+toy_reference_barcodes_file <- file.path(raw_dir, "toy_reference_barcodes.tsv.gz")
+toy_reference_labels_file <- file.path(raw_dir, "toy_reference_labels.csv.gz")
+toy_text_required <- c(
+  toy_spatial_count_files,
+  toy_spatial_barcode_files,
+  toy_spatial_features_file,
+  toy_spatial_coordinates_file,
+  toy_reference_count_file,
+  toy_reference_features_file,
+  toy_reference_barcodes_file,
+  toy_reference_labels_file
+)
+toy_text_mode <- length(toy_spatial_count_files) > 0L &&
+  length(toy_spatial_count_files) == length(toy_spatial_barcode_files) &&
+  all(file.exists(toy_text_required))
+
 toy_spatial_file <- file.path(raw_dir, "toy_spatial.rds")
 toy_reference_file <- file.path(raw_dir, "toy_single_cell_reference.rds")
 if (xor(file.exists(toy_spatial_file), file.exists(toy_reference_file))) {
@@ -33,7 +115,8 @@ if (xor(file.exists(toy_spatial_file), file.exists(toy_reference_file))) {
     "toy_single_cell_reference.rds in RAW_DIR"
   )
 }
-toy_mode <- file.exists(toy_spatial_file) && file.exists(toy_reference_file)
+toy_rds_mode <- file.exists(toy_spatial_file) && file.exists(toy_reference_file)
+toy_mode <- toy_text_mode || toy_rds_mode
 
 target_h5 <- file.path(
   raw_dir,
@@ -49,7 +132,9 @@ annotation_csv <- file.path(
   "FLEX_Ovarian_Barcode_Cluster_Annotation.csv"
 )
 
-required_files <- if (toy_mode) {
+required_files <- if (toy_text_mode) {
+  toy_text_required
+} else if (toy_rds_mode) {
   c(toy_spatial_file, toy_reference_file)
 } else {
   c(target_h5, cells_csv, reference_h5, annotation_csv)
@@ -59,7 +144,18 @@ if (length(missing_files)) {
   stop("Missing downloaded files: ", paste(missing_files, collapse = ", "))
 }
 
-if (toy_mode) {
+if (toy_text_mode) {
+  message_now("Loading compressed toy spatial sparse text bundle")
+  target_counts <- read_sparse_text_matrix(
+    toy_spatial_count_files,
+    toy_spatial_barcode_files,
+    toy_spatial_features_file
+  )
+  toy_coordinates <- data.table::fread(
+    toy_spatial_coordinates_file,
+    colClasses = list(character = "cell_id")
+  )
+} else if (toy_rds_mode) {
   message_now("Loading compressed toy spatial bundle")
   toy_spatial <- readRDS(toy_spatial_file)
   if (!is.list(toy_spatial) ||
@@ -129,7 +225,23 @@ if (!toy_mode && length(sketch_cells) != 100000L) {
   stop("Expected 100,000 sketch cells; observed ", length(sketch_cells))
 }
 
-if (toy_mode) {
+if (toy_text_mode) {
+  message_now("Loading compressed toy single-cell reference sparse text bundle")
+  reference_counts <- read_sparse_text_matrix(
+    toy_reference_count_file,
+    toy_reference_barcodes_file,
+    toy_reference_features_file
+  )
+  toy_labels <- data.table::fread(
+    toy_reference_labels_file,
+    colClasses = "character"
+  )
+  if (!all(c("cell_id", "label") %in% names(toy_labels))) {
+    stop("Toy reference labels must contain cell_id and label")
+  }
+  label_lookup <- setNames(toy_labels$label, toy_labels$cell_id)
+  reference_labels_all <- unname(label_lookup[colnames(reference_counts)])
+} else if (toy_rds_mode) {
   message_now("Loading compressed toy single-cell reference bundle")
   toy_reference <- readRDS(toy_reference_file)
   if (!is.list(toy_reference) ||
@@ -295,7 +407,13 @@ summary <- data.table::data.table(
     "sketch_seed"
   ),
   value = c(
-    if (toy_mode) "github_toy_rds" else "full_10x_h5",
+    if (toy_text_mode) {
+      "github_toy_sparse_text"
+    } else if (toy_rds_mode) {
+      "github_toy_rds"
+    } else {
+      "full_10x_h5"
+    },
     ncol(target_counts),
     length(sketch_cells),
     nrow(target_counts),
